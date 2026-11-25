@@ -4,7 +4,7 @@
 
 一个 Windows 桌面悬浮倒计时。给每秒定个价。
 
-![毕业倒计时悬浮窗示例](docs/preview.png)
+![悬浮窗显示「距死亡」倒计时，以及按每秒一元计算的剩余时间价值](docs/death-countdown.png)
 
 ## 下载
 
