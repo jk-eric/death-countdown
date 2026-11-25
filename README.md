@@ -1,12 +1,12 @@
-# 桌面倒计时
+# 死亡倒计时
 
-Windows 桌面悬浮小窗。给毕业、跨年或其他日子设一个目标，把剩余时间显示到毫秒。也可以给每秒定个价，看着剩余金额一点点减少。
+一个 Windows 桌面悬浮倒计时。给每秒定个价。
 
 ![毕业倒计时悬浮窗示例](docs/preview.png)
 
 ## 下载
 
-从 [最新版本](https://github.com/jk-eric/desktop-countdown/releases/latest) 下载 **DesktopCountdown.exe**，双击启动。程序使用 Windows 的 .NET Framework 4.x 和 Windows Forms。
+从 [最新版本](https://github.com/jk-eric/death-countdown/releases/latest) 下载 **DeathCountdown.exe**，双击启动。程序使用 Windows 的 .NET Framework 4.x 和 Windows Forms。
 
 ## 使用
 
@@ -25,4 +25,4 @@ Windows 桌面悬浮小窗。给毕业、跨年或其他日子设一个目标，
 .\build.ps1
 ```
 
-脚本调用 .NET Framework 自带的 C# 编译器，生成 `dist\DesktopCountdown.exe`。
+脚本调用 .NET Framework 自带的 C# 编译器，生成 `dist\DeathCountdown.exe`。
