@@ -10,6 +10,11 @@ using System.Xml.Serialization;
 public sealed class Preferences
 {
     public string EventName = "2027 元旦";
+    public string Language = "auto";
+    public string Currency = "CNY"; // Legacy settings were denominated in yuan.
+    [XmlAnyElement]
+    public System.Xml.XmlElement[] AdditionalSettings;
+    internal string DisplayEvent { get { return EventName == "2027 元旦" ? Locale.T("2027 元旦", "New Year 2027") : EventName; } }
     public long End = Clock.NewYear;
     public decimal Rate = 1m;
     public bool Accumulating;
@@ -24,7 +29,7 @@ public sealed class Preferences
 
     public static Preferences Read(string file)
     {
-        if (!File.Exists(file)) return new Preferences();
+        if (!File.Exists(file)) return new Preferences { Currency = Locale.RegionalCurrency };
         try
         {
             using (var stream = File.OpenRead(file))
@@ -32,7 +37,7 @@ public sealed class Preferences
                 var p = (Preferences)new XmlSerializer(typeof(Preferences)).Deserialize(stream);
                 if (p.Rate < 0 || p.Rate > 999999 || p.Bank < 0 || p.Since < 0 ||
                     p.Since > DateTime.MaxValue.Ticks || (p.Accumulating && p.Since == 0))
-                    return new Preferences();
+                    return new Preferences { Currency = Locale.RegionalCurrency };
                 p.Alpha = Math.Max(10, Math.Min(100, p.Alpha));
                 if (p.Zoom < 75 || p.Zoom > 200) p.Zoom = 100;
                 if (string.IsNullOrWhiteSpace(p.EventName)) p.EventName = "2027 元旦";
@@ -41,9 +46,9 @@ public sealed class Preferences
                 return p;
             }
         }
-        catch (InvalidOperationException) { return new Preferences(); }
-        catch (IOException) { return new Preferences(); }
-        catch (UnauthorizedAccessException) { return new Preferences(); }
+        catch (InvalidOperationException) { return new Preferences { Currency = Locale.RegionalCurrency }; }
+        catch (IOException) { return new Preferences { Currency = Locale.RegionalCurrency }; }
+        catch (UnauthorizedAccessException) { return new Preferences { Currency = Locale.RegionalCurrency }; }
     }
 
     public void Write(string file)
@@ -123,35 +128,35 @@ sealed class TargetDialog : Form
 
     public TargetDialog(Preferences p)
     {
-        Text = "设置倒计时目标";
+        Text = Locale.T("设置倒计时目标", "Countdown target");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MinimizeBox = MaximizeBox = ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleDimensions = new SizeF(96,96); AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(316,252);
-        var label = new Label { Text = "事件名称", AutoSize = true, Location = new Point(16,14) };
-        name.SetBounds(18,36,280,25); name.MaxLength = 60; name.Text = p.EventName;
-        absolute.Text = "指定日期和时间（北京时间）"; absolute.SetBounds(16,72,279,24);
+        var label = new Label { Text = Locale.T("事件名称", "Event name"), AutoSize = true, Location = new Point(16,14) };
+        name.SetBounds(18,36,280,25); name.MaxLength = 60; name.Text = p.DisplayEvent;
+        absolute.Text = Locale.T("指定日期和时间（北京时间）", "Date and time (UTC+8)"); absolute.SetBounds(16,72,279,24);
         date.SetBounds(38,98,260,24); date.Format = DateTimePickerFormat.Custom;
         date.CustomFormat = "yyyy-MM-dd  HH:mm:ss"; date.Value = Clock.InBeijing(p.End);
-        relative.Text = "从现在起，倒数多少天"; relative.SetBounds(16,131,279,24);
+        relative.Text = Locale.T("从现在起，倒数多少天", "Days from now"); relative.SetBounds(16,131,279,24);
         days.SetBounds(38,157,110,26); days.Minimum = 1; days.Maximum = 999999;
         days.Value = Math.Min(days.Maximum, Math.Max(1, (decimal)Math.Ceiling(
             (p.End - DateTime.UtcNow.Ticks) / (double)TimeSpan.TicksPerDay)));
-        var unit = new Label { Text = "天", AutoSize = true, Location = new Point(157,161) };
+        var unit = new Label { Text = Locale.T("天", "days"), AutoSize = true, Location = new Point(157,161) };
         error.SetBounds(16,190,285,20); error.ForeColor = Color.Firebrick;
-        var ok = new Button { Text = "保存" }; ok.SetBounds(140,214,76,28);
-        var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel };
+        var ok = new Button { Text = Locale.T("保存", "Save") }; ok.SetBounds(140,214,76,28);
+        var cancel = new Button { Text = Locale.T("取消", "Cancel"), DialogResult = DialogResult.Cancel };
         cancel.SetBounds(223,214,76,28);
         Controls.AddRange(new Control[] {label,name,absolute,date,relative,days,unit,error,ok,cancel});
         absolute.CheckedChanged += delegate { date.Enabled = absolute.Checked; };
         relative.CheckedChanged += delegate { days.Enabled = relative.Checked; };
         absolute.Checked = true; days.Enabled = false;
         ok.Click += delegate {
-            if (EventName.Length == 0) { error.Text = "请输入事件名称。"; name.Focus(); return; }
+            if (EventName.Length == 0) { error.Text = Locale.T("请输入事件名称。", "Enter an event name."); name.Focus(); return; }
             long now = DateTime.UtcNow.Ticks;
             long end = relative.Checked ? now + (long)days.Value * TimeSpan.TicksPerDay : Clock.ToUtc(date.Value);
-            if (end <= now && end != p.End) { error.Text = "请选一个将来的日期和时间。"; return; }
+            if (end <= now && end != p.End) { error.Text = Locale.T("请选一个将来的日期和时间。", "Choose a future date and time."); return; }
             Deadline = end; SavedAt = now; DialogResult = DialogResult.OK;
         };
         AcceptButton = ok; CancelButton = cancel;
@@ -185,8 +190,9 @@ sealed class Widget : Form
     public Widget(Preferences prefs, string file)
     {
         this.prefs = prefs;
+        Locale.Use(prefs.Language, prefs.Currency);
         this.file = file;
-        Text = prefs.EventName + "倒计时";
+        Text = prefs.DisplayEvent + Locale.T("倒计时", " countdown");
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;
@@ -268,35 +274,45 @@ sealed class Widget : Form
             if (!(ex is IOException || ex is UnauthorizedAccessException)) throw;
             if (saveWarned) return;
             saveWarned = true;
-            MessageBox.Show(this,"本次设置已生效，但无法保存到本机。\r\n" + ex.Message, Text);
+            MessageBox.Show(this,Locale.T("本次设置已生效，但无法保存到本机。", "Settings applied but could not be saved.") + Environment.NewLine + ex.Message, Text);
+        }
+    }
+    internal bool Reopen { get; private set; }
+    void EditLanguage()
+    {
+        using (var dialog = new LanguageDialog(prefs.Language, prefs.Currency)) {
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            prefs.Language = dialog.Language; prefs.Currency = dialog.Currency;
+            Persist();
+            Reopen = true; Close();
         }
     }
     void BuildMenu()
     {
-        var target = new ToolStripMenuItem("设置倒计时目标…", null, delegate {
+        var target = new ToolStripMenuItem(Locale.T("设置倒计时目标…", "Set countdown target…"), null, delegate {
             using (var dialog = new TargetDialog(prefs))
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                Clock.SetTarget(prefs, dialog.EventName, dialog.Deadline, dialog.SavedAt);
-                Text = prefs.EventName + "倒计时";
+                Clock.SetTarget(prefs, dialog.EventName == prefs.DisplayEvent ? prefs.EventName : dialog.EventName, dialog.Deadline, dialog.SavedAt);
+                Text = prefs.DisplayEvent + Locale.T("倒计时", " countdown");
                 Persist(); Invalidate();
             }
         });
-        var rate = new ToolStripMenuItem("设置费率…", null, delegate { EditRate(); });
-        var remain = new ToolStripMenuItem("显示剩余时间价值", null, delegate {
+        var rate = new ToolStripMenuItem(Locale.T("设置费率…", "Set rate…"), null, delegate { EditRate(); });
+        var remain = new ToolStripMenuItem(Locale.T("显示剩余时间价值", "Show value of remaining time"), null, delegate {
             prefs.Accumulating = false; Persist(); Invalidate();
         });
-        var start = new ToolStripMenuItem("从零开始累计金额", null, delegate {
-            if (prefs.Accumulating && MessageBox.Show(this, "将当前累计金额清零并重新开始？",
+        var start = new ToolStripMenuItem(Locale.T("从零开始累计金额", "Start counting earnings from zero"), null, delegate {
+            if (prefs.Accumulating && MessageBox.Show(this, Locale.T("将当前累计金额清零并重新开始？", "Reset earnings to zero and start again?"),
                 Text, MessageBoxButtons.OKCancel) != DialogResult.OK) return;
             Clock.Start(prefs, DateTime.UtcNow.Ticks); Persist(); Invalidate();
         });
-        var pin = new ToolStripMenuItem("窗口置顶", null, delegate {
+        var pin = new ToolStripMenuItem(Locale.T("窗口置顶", "Always on top"), null, delegate {
             TopMost = prefs.Pinned = !prefs.Pinned; Persist();
         });
-        var alpha = new ToolStripLabel("不透明度   " + prefs.Alpha + "%");
+        var alpha = new ToolStripLabel(Locale.T("不透明度   ", "Opacity   ") + prefs.Alpha + "%");
         var slider = new TrackBar { Minimum = 10, Maximum = 100, Value = prefs.Alpha,
-            TickStyle = TickStyle.None, AutoSize = false, AccessibleName = "不透明度",
+            TickStyle = TickStyle.None, AutoSize = false, AccessibleName = Locale.T("不透明度", "Opacity"),
             Size = new Size((int)(160*dpiScale), (int)(26*dpiScale)),
             BackColor = SystemColors.Menu };
         var host = new ToolStripControlHost(slider);
@@ -304,17 +320,18 @@ sealed class Widget : Form
         slider.ValueChanged += delegate {
             prefs.Alpha = slider.Value;
             Opacity = prefs.Alpha / 100.0;
-            alpha.Text = "不透明度   " + prefs.Alpha + "%";
+            alpha.Text = Locale.T("不透明度   ", "Opacity   ") + prefs.Alpha + "%";
             alphaChanged = true;
         };
         menu.Closed += delegate { if (alphaChanged) { Persist(); alphaChanged = false; } };
-        var resetSize = new ToolStripMenuItem("恢复默认大小", null, delegate { RestoreDefaultSize(); });
+        var resetSize = new ToolStripMenuItem(Locale.T("恢复默认大小", "Restore default size"), null, delegate { RestoreDefaultSize(); });
         menu.Items.AddRange(new ToolStripItem[] {target,rate, remain, start,new ToolStripSeparator(),
-            pin,resetSize,alpha,host,new ToolStripSeparator(),new ToolStripMenuItem("退出",null,delegate { Close(); })});
+            pin,resetSize,alpha,host,new ToolStripSeparator(),
+            new ToolStripMenuItem(Locale.T("语言和货币 / Language…", "Language and currency…"), null, delegate { EditLanguage(); }),new ToolStripSeparator(),new ToolStripMenuItem(Locale.T("退出", "Exit"),null,delegate { Close(); })});
         menu.Opening += delegate {
-            rate.Text = "设置费率…  ¥" + prefs.Rate.ToString("0.####") + "/秒";
+            rate.Text = Locale.T("设置费率…  ", "Set rate…  ") + Locale.Symbol + prefs.Rate.ToString("0.####") + Locale.T("/秒", "/s");
             remain.Checked = !prefs.Accumulating;
-            start.Text = prefs.Accumulating ? "重新从零累计…" : "从零开始累计金额";
+            start.Text = prefs.Accumulating ? Locale.T("重新从零累计…", "Restart earnings from zero…") : Locale.T("从零开始累计金额", "Start counting earnings from zero");
             start.Enabled = DateTime.UtcNow.Ticks < prefs.End;
             pin.Checked = prefs.Pinned;
         };
@@ -326,16 +343,16 @@ sealed class Widget : Form
         using (var ok = new Button())
         using (var cancel = new Button())
         {
-            box.Text = "设置费率"; box.FormBorderStyle = FormBorderStyle.FixedDialog;
+            box.Text = Locale.T("设置费率", "Set rate"); box.FormBorderStyle = FormBorderStyle.FixedDialog;
             box.StartPosition = FormStartPosition.CenterParent;
             box.MinimizeBox = box.MaximizeBox = false; box.ShowInTaskbar = false;
             box.AutoScaleMode = AutoScaleMode.Dpi; box.AutoScaleDimensions = new SizeF(96,96);
             box.ClientSize = new Size(264,125);
-            var label = new Label { Text = "每秒金额（元）", AutoSize = true, Location = new Point(16,13) };
+            var label = new Label { Text = Locale.T("每秒金额", "Amount per second") + " (" + Locale.Currency + ")", AutoSize = true, Location = new Point(16,13) };
             input.SetBounds(19,39,225,26); input.DecimalPlaces = 4; input.Maximum = 999999;
             input.Increment = 0.1m; input.Value = prefs.Rate;
-            ok.SetBounds(82,83,76,28); ok.Text = "确定"; ok.DialogResult = DialogResult.OK;
-            cancel.SetBounds(168,83,76,28); cancel.Text = "取消"; cancel.DialogResult = DialogResult.Cancel;
+            ok.SetBounds(82,83,76,28); ok.Text = Locale.T("确定", "OK"); ok.DialogResult = DialogResult.OK;
+            cancel.SetBounds(168,83,76,28); cancel.Text = Locale.T("取消", "Cancel"); cancel.DialogResult = DialogResult.Cancel;
             box.Controls.AddRange(new Control[] { label,input,ok,cancel });
             box.AcceptButton = ok; box.CancelButton = cancel;
             box.Shown += delegate { input.Focus(); input.Select(0, input.Text.Length); };
@@ -419,9 +436,9 @@ sealed class Widget : Form
         long now = DateTime.UtcNow.Ticks;
         TimeSpan left = TimeSpan.FromTicks(Clock.RemainingMs(prefs,now) * TimeSpan.TicksPerMillisecond);
         g.FillEllipse(mint,18,18,6,6);
-        string title = "距 " + prefs.EventName;
+        string title = Locale.T("距 ", "Until ") + prefs.DisplayEvent;
         if (now >= prefs.End) title = prefs.End == Clock.NewYear && prefs.EventName == "2027 元旦"
-            ? "2027，新年快乐" : prefs.EventName + " · 已到达";
+            ? Locale.T("2027，新年快乐", "Happy New Year 2027") : prefs.DisplayEvent + Locale.T(" · 已到达", " · reached");
         using (var header = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap })
             g.DrawString(title,body,white,new RectangleF(29,10,w-82,24),header);
         for (int i=0;i<3;i++) g.FillEllipse(overMenu ? white : muted,w-39+i*6,19,3,3);
@@ -435,12 +452,12 @@ sealed class Widget : Form
         }
         g.DrawString(day,days,white,15,39);
         float dx = day.Length * 18.2f;
-        g.DrawString("天",body,muted,19+dx,55);
+        g.DrawString(Locale.T("天","d"),body,muted,19+dx,55);
         g.DrawString(left.ToString(@"hh\:mm\:ss\.fff"),digits,white,43+dx,36);
         g.Restore(timeState);
         g.DrawLine(divider,18,h-42,w-18,h-42);
-        g.DrawString(prefs.Accumulating ? "累计金额" : "剩余时间价值",small,muted,16,h-29);
-        string amount = "¥" + Clock.Value(prefs,now).ToString("N2",CultureInfo.InvariantCulture);
+        g.DrawString(prefs.Accumulating ? Locale.T("累计金额", "Earned") : Locale.T("剩余时间价值", "Time value"),small,muted,16,h-29);
+        string amount = Locale.Symbol + Clock.Value(prefs,now).ToString("N2",CultureInfo.InvariantCulture);
         using (var right = new StringFormat { Alignment = StringAlignment.Far, FormatFlags = StringFormatFlags.NoWrap }) {
             float width = Math.Max(w-112, g.MeasureString(amount,money).Width+2);
             g.TranslateTransform(w-15,0);
@@ -472,7 +489,11 @@ static class Program
             Application.SetCompatibleTextRenderingDefault(false);
             string file = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                                        "YuanDanCountdown2027","settings.xml");
-            using (var widget = new Widget(Preferences.Read(file), file)) Application.Run(widget);
+            var prefs = Preferences.Read(file);
+            bool reopen;
+            do {
+                using (var widget = new Widget(prefs, file)) { Application.Run(widget); reopen = widget.Reopen; }
+            } while (reopen);
         }
     }
 }
